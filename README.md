@@ -36,6 +36,10 @@ Package.json has the following commands:
 
 This command *updates* an existing package that conforms to the fbenv standards.
 
+It rewrites package.json while preserving the entries in package.json which
+fbenv does not control. It also only adds to .gitignore and .npmignore. Existing
+entries are not deleted. It completely overwrites any scripts in the file system.
+
 * It overwrites entries in package.json that fbenv controls
   * Modules:
     * babel
