@@ -14,12 +14,12 @@ This will create a scaffolding with the following elements:
 
 * A package.json with the supported versions of babel, eslint, flow, mocha, chai.
 * A .eslintrc and .flowconfig to configure eslint and flow respectively
-* A src directory where you place your pre-transpiled code.
+* A src directory where you place your uncompiled ES6 code.
 * Scripts:
-  * mocha-bootload.js: This does runtime transpilation so that tests are run
-    without a build step
+  * mocha-bootload.js: This does runtime compilation of ES6 to ES5 so
+    that tests are run without a build step
   * watch.js: This is used by npm run watch
-* An .npmignore that ignores the target directory for transpiled code (dist)
+* An .npmignore that ignores the target directory for compiled code (dist)
   as well as other things
 * A .gitignore with appropriate exclusions.
 
