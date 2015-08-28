@@ -1,5 +1,14 @@
+/**
+ *  Copyright (c) 2015, Facebook, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ */
 
-var fs = require('fs');
+import fs from 'fs';
+import { exec } from 'child_process';
 
 var requiredModules = {
   babel: '5.8.21',
@@ -7,6 +16,7 @@ var requiredModules = {
   'babel-runtime': '5.8.20',
   'babel-eslint': '4.0.10',
   chai: '3.2.0',
+  'chai-subset': '1.0.1',
   eslint: '1.1.0',
   'eslint-plugin-babel': '^2.1.1',
   'flow-bin': '0.14.0',
@@ -28,22 +38,22 @@ var packageTemplate = {
     testonly: 'mocha $npm_package_options_mocha',
     lint: 'eslint src',
     check: 'flow check',
-    watch: 'babel scripts/watch.js | node',
+    watch: 'babel resources/watch.js | node',
   },
   options: {
-    mocha: '--require scripts/mocha-bootload src/**/__tests__/**/*.js'
+    mocha: '--require resources/mocha-bootload src/**/__tests__/**/*.js'
   },
 };
 
-var requiredDirectories = [ 'src', 'scripts' ];
-var npmIgnores = [ 'scripts', 'npm-debug.log', '*.swp', '.*' ];
-var gitIgnores = [ 'dist', 'npm-debug.log' ];
+var requiredDirectories = [ 'src', 'resources', 'src/__tests__' ];
+var requiredNpmIgnores = [ 'resources', 'npm-debug.log', '*.swp', '.*' ];
+var requiredGitIgnores = [ 'dist', 'npm-debug.log' ];
 
 var files = {
   eslintrc: '.eslintrc',
   flowconfig: '.flowconfig',
-  'mocha-bootload.js': 'scripts/mocha-bootload.js',
-  'watch.js': 'scripts/watch.js',
+  'mocha-bootload.js': 'resources/mocha-bootload.js',
+  'watch.js': 'resources/watch.js',
   LICENSE: 'LICENSE',
   PATENTS: 'PATENTS',
 };
@@ -52,20 +62,15 @@ function textifyObject(obj) {
   return JSON.stringify(obj, null, 2);
 }
 
-import sys from 'sys'; 
-import { exec } from 'child_process';
-
+// TODO: figure out how to stream output
 async function executeCommand(text) {
-  console.log(text);
-  function p(error, stdout, stderr) {
-    console.log(stdout);
-  }
-  var result = await exec(text, (_, stdout) => console.log(stdout));
+  console.log('Executing: ' + text);
+  return await exec(text, (_, stdout) => console.log(stdout));
 }
 
-async function createFile(file, text) {
+async function overwriteFile(file, text) {
   var returnValue = await fs.writeFile(file, text);
-  console.log(`created ${file}`);
+  console.log(`wrote file ${file}`);
   return returnValue;
 }
 
@@ -74,7 +79,19 @@ export async function main(argv) {
   var targetDirectory = argv[3];
 
   function packagePath(p) {
-    return `${targetDirectory}/${p}`;
+    return `${targetDirectory}${p}`;
+  }
+
+  function appendRequiredIgnores(file, requiredIgnores) {
+    var npmIgnoreContents = fs.readFileSync(packagePath(file), 'utf8');
+    var ignoresInFile = npmIgnoreContents.split('\n');
+    console.log(ignoresInFile);
+    requiredIgnores.forEach(ignore => {
+      if (!ignoresInFile.includes(ignore)) {
+        ignoresInFile.push(ignore);
+      }
+    });
+    overwriteFile(packagePath(file), ignoresInFile.join('\n'));
   }
 
   switch (command) {
@@ -82,19 +99,25 @@ export async function main(argv) {
       // create directory
       await executeCommand(`mkdir -p ${targetDirectory}`);
       // create package file
-      await createFile(
+      await overwriteFile(
         packagePath('package.json'),
         textifyObject(packageTemplate));
       // create required directories
-      requiredDirectories.forEach(async (dir) => {
+      requiredDirectories.forEach(async dir => {
         await executeCommand(`mkdir -p ${packagePath(dir)}`);
       });
       // create .npmignore
-      await createFile(packagePath('.npmignore'), npmIgnores.join('\n'));
+      await overwriteFile(
+        packagePath('.npmignore'),
+        requiredNpmIgnores.join('\n')
+      );
       // create .gitignore
-      await createFile(packagePath('.gitignore'), gitIgnores.join('\n'));
+      await overwriteFile(
+        packagePath('.gitignore'),
+        requiredGitIgnores.join('\n')
+      );
       // copy files to locations
-      Object.keys(files).forEach(async (source) => {
+      Object.keys(files).forEach(async source => {
         var target = files[source];
         await executeCommand(`cp files/${source} ${targetDirectory}/${target}`);
       });
@@ -105,17 +128,52 @@ export async function main(argv) {
       await executeCommand(`npm install`);
       process.chdir(scriptDir);
 
+      // create this so that npm run test works
+      await executeCommand(
+        `touch ${targetDirectory}/src/__tests__/testStub.js`
+      );
+
       break;
     case 'update':
-      // load package, overwrite shit
-      // check for directories
+      var fileContents = fs.readFileSync(packagePath('package.json'), 'utf8');
+      var packageObj = JSON.parse(fileContents);
+
+      // overwrite package.json entries
+      Object.keys(packageTemplate).forEach(key => {
+        packageObj[key] = mergeIntoObj(packageObj[key], packageTemplate[key]);
+      });
+
+      overwriteFile(packagePath('package.json'), textifyObject(packageObj));
+      // create directories if not there
+      requiredDirectories.forEach(async dir => {
+        await executeCommand(`mkdir -p ${packagePath(dir)}`);
+      });
+
       // for each npmIgnore, grep .npmignore. append if necessary
+      appendRequiredIgnores('.npmignore', requiredNpmIgnores);
       // samesies for .gitignore
+      appendRequiredIgnores('.gitignore', requiredGitIgnores);
       // recopy files to locations
-      // blow away npm modules listed here
-      // npm install
+      Object.keys(files).forEach(async source => {
+        var target = files[source];
+        await executeCommand(`cp files/${source} ${targetDirectory}/${target}`);
+      });
+
+      var rmPaths = Object.keys(requiredModules).map(packagePath).join(' ');
+      var rmCommand = 'rm -rf ' + rmPaths;
+      await executeCommand(rmCommand)
+
+      await executeCommand('npm install');
       break;
     default:
       throw new Error(`unknown command ${command}`);
+  }
+
+  function mergeIntoObj(target, props) {
+    var output = {...target};
+    Object.keys(props).forEach(prop => {
+      output[prop] = props[prop];
+    });
+    return output;
   }
 }

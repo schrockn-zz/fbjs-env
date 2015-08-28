@@ -5,6 +5,7 @@
     "babel-runtime": "5.8.20",
     "babel-eslint": "4.0.10",
     "chai": "3.2.0",
+    "chai-subset": "1.0.1",
     "eslint": "1.1.0",
     "eslint-plugin-babel": "^2.1.1",
     "flow-bin": "0.14.0",
@@ -16,6 +17,9 @@
     "testonly": "mocha $npm_package_options_mocha",
     "lint": "eslint src",
     "check": "flow check",
-    "watch": "babel scripts/watch.js | node"
+    "watch": "babel resources/watch.js | node"
+  },
+  "options": {
+    "mocha": "--require resources/mocha-bootload src/**/__tests__/**/*.js"
   }
 }
