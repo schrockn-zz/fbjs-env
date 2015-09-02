@@ -8,6 +8,7 @@
  */
 
 import fs from 'fs';
+import path from 'path';
 import { exec } from 'child_process';
 
 var requiredModules = {
@@ -58,6 +59,12 @@ var files = {
   PATENTS: 'PATENTS',
 };
 
+function ensureFileExists(path) {
+  if (!fs.existsSync(path)) {
+    fs.writeFileSync(path, '');
+  }
+}
+
 function textifyObject(obj) {
   return JSON.stringify(obj, null, 2);
 }
@@ -76,14 +83,23 @@ async function overwriteFile(file, text) {
 
 export async function main(argv) {
   var command = argv[2];
-  var targetDirectory = argv[3];
+  var targetDirectory = path.normalize(argv[3]);
+  console.log('targetDirectory: ' + targetDirectory);
 
   function packagePath(p) {
-    return `${targetDirectory}${p}`;
+    if (targetDirectory.endsWith('/')) {
+      return `${targetDirectory}${p}`;
+    } else {
+      return `${targetDirectory}/${p}`;
+    }
   }
 
   function appendRequiredIgnores(file, requiredIgnores) {
-    var npmIgnoreContents = fs.readFileSync(packagePath(file), 'utf8');
+    var filePath = packagePath(file);
+
+    ensureFileExists(filePath);
+
+    var npmIgnoreContents = fs.readFileSync(filePath, 'utf8');
     var ignoresInFile = npmIgnoreContents.split('\n');
     console.log(ignoresInFile);
     requiredIgnores.forEach(ignore => {
@@ -91,7 +107,11 @@ export async function main(argv) {
         ignoresInFile.push(ignore);
       }
     });
-    overwriteFile(packagePath(file), ignoresInFile.join('\n'));
+    overwriteFile(filePath, ignoresInFile.join('\n'));
+  }
+
+  function sourcePath(path) {
+    return `${__dirname}/../${path}`;
   }
 
   switch (command) {
@@ -119,19 +139,20 @@ export async function main(argv) {
       // copy files to locations
       Object.keys(files).forEach(async source => {
         var target = files[source];
-        await executeCommand(`cp files/${source} ${targetDirectory}/${target}`);
+        var sourceFilePath = sourcePath(`files/${source}`);
+        await executeCommand(`cp ${sourceFilePath} ${packagePath(target)}`);
       });
 
       // npm install
       var scriptDir = process.cwd();
       process.chdir(targetDirectory);
+      console.log('changed cwd to: ' + process.cwd())
       await executeCommand(`npm install`);
       process.chdir(scriptDir);
+      console.log('changed cwd to: ' + process.cwd())
 
       // create this so that npm run test works
-      await executeCommand(
-        `touch ${targetDirectory}/src/__tests__/testStub.js`
-      );
+      ensureFileExists(packagePath('/src/__tests__/testStub.js'));
 
       break;
     case 'update':
@@ -156,7 +177,8 @@ export async function main(argv) {
       // recopy files to locations
       Object.keys(files).forEach(async source => {
         var target = files[source];
-        await executeCommand(`cp files/${source} ${targetDirectory}/${target}`);
+        var sourceFilePath = sourcePath(`files/${source}`);
+        await executeCommand(`cp ${sourceFilePath} ${packagePath(target)}`);
       });
 
       var rmPaths = Object.keys(requiredModules).map(packagePath).join(' ');
