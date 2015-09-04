@@ -143,14 +143,6 @@ export async function main(argv) {
         await executeCommand(`cp ${sourceFilePath} ${packagePath(target)}`);
       });
 
-      // npm install
-      var scriptDir = process.cwd();
-      process.chdir(targetDirectory);
-      console.log('changed cwd to: ' + process.cwd())
-      await executeCommand(`npm install`);
-      process.chdir(scriptDir);
-      console.log('changed cwd to: ' + process.cwd())
-
       // create this so that npm run test works
       ensureFileExists(packagePath('/src/__tests__/testStub.js'));
 
@@ -180,12 +172,6 @@ export async function main(argv) {
         var sourceFilePath = sourcePath(`files/${source}`);
         await executeCommand(`cp ${sourceFilePath} ${packagePath(target)}`);
       });
-
-      var rmPaths = Object.keys(requiredModules).map(packagePath).join(' ');
-      var rmCommand = 'rm -rf ' + rmPaths;
-      await executeCommand(rmCommand)
-
-      await executeCommand('npm install');
       break;
     default:
       throw new Error(`unknown command ${command}`);
